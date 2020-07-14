@@ -1,0 +1,33 @@
+
+            |||||||||||||||||||||||||||||||||||||||
+            |||　    FreeBSD 12.0 release       |||
+            |||         Zpool Setting           |||
+            |||||||||||||||||||||||||||||||||||||||
+
+
+※ Zpool mirror RAID 1 "Name:mypool"
+
+> create two virtual hard disks on VM
+ee /var/run/dmesg.boot 
+> check for messages likes:
+> ada0: <VBOX HARDDISK 1.0> ATA-6 device #(OS)
+> ada1: <VBOX HARDDISK 1.0> ATA-6 device #(New1)
+> ada2: <VBOX HARDDISK 1.0> ATA-6 device #(New2)
+
+sudo zpool create mypool mirror /dev/ada1 /dev/ada2
+sudo zfs set mountpoint=/home/ftp mypool
+sudo zfs set compression=lz4 mypool
+sudo zfs set atime=off mypool
+
+※ Zfs create datasets under mypool
+
+sudo zfs create mypool/hidden
+sudo zfs create mypool/upload
+sudo zfs create mypool/public
+sudo zfs set compression=lz4 mypool/hidden
+sudo zfs set compression=lz4 mypool/upload
+sudo zfs set compression=lz4 mypool/public
+sudo zfs set atime=off mypool/hidden
+sudo zfs set atime=off mypool/upload
+sudo zfs set atime=off mypool/public
+zfs list

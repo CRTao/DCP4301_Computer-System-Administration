@@ -1,0 +1,113 @@
+
+            |||||||||||||||||||||||||||||||||||||||
+            |||　    FreeBSD 12.0 release       |||
+            |||  Pure-FTPd FTP server Setting   |||
+            |||||||||||||||||||||||||||||||||||||||
+
+ Anonymous : 
+   > can download/upload file            in /home/ftp
+   > can't mkdir,rmdir,del               in /home/ftp
+   > can't ls                            /home/ftp/hidden
+   > can cd,ls                           /home/ftp/hidden/treasure
+
+ Sysadm :
+   > can do everything                   in /home/ftp
+
+ ftp-vip1,ftp-vip2 :
+   > can do everything                   in /home/ftp/public
+   > can do every own file/dir           in /home/ftp/upload
+   > can't  mkdir,rmdir,del otherfiles   in /home/ftp/upload
+
+
+             GID                      UID
+  
+virtualgp   1003   |   ftpuser1      1007     |   ftp-vip1
+sysadm      1004   |   ftpuser2      1006     |   ftp-vip2
+anonygp     1005   |   sysadm        1004
+                       ftp           1005
+
+
+※ Installation
+
+pkg install pure-ftpd
+echo 'pureftpd_enable="YES"' >> /etc/rc.conf
+/etc/rc.d/init.d/pure-ftpd restart
+
+
+※ Directory & File
+
+mkdir -p /home/ftp/public /home/ftp/upload /home/ftp/hidden/treasure
+echo 'This is SECRET' >> /home/ftp/hidden/treasure/secret
+
+
+※ Setup pure-ftpd.conf
+
+cd /usr/local/etc
+cp pure-ftpd.conf.sample pure-ftpd.conf
+chmod u+w pure-ftpd.conf
+
+ > NoAnonymous no
+ > AnonymousCanCreateDirs yes
+ > AnonymousCantUpload no
+ > PureDB /usr/local/etc/pureftpd.pdb
+ > Umask 133:002
+ > TLS 1
+
+
+※ pw-User & pure-pw vitual user
+
+ > Anonymous
+pw groupadd anonygp
+pw useradd ftp -g ftpuser -d /home/ftp
+ 
+ > Sysadm
+pw groupadd sysadm
+pw useradd sysadm -g sysadm -d /home/ftp
+
+ > Virtual Users
+pw groupadd virtualgp
+pw useradd ftpuser1 -g virtualgp -d /home/ftp -s /sbin/nologin
+pw useradd ftpuser2 -g virtualgp -d /home/ftp -s /sbin/nologin
+pure-pw useradd ftp-vip1 -u ftpuser1 -g virtualgp -d /home/ftp -m
+pure-pw useradd ftp-vip2 -u ftpuser2 -g virtualgp -d /home/ftp -m
+
+
+※ make pureftpd user database
+
+sudo pure-pw mkdb
+
+
+※ Setting File Permissions
+
+sudo chown sysadm:virtualgp /home/ftp/hidden
+sudo chown sysadm:virtualgp /home/ftp/public
+sudo chown sysadm:virtualgp /home/ftp/upload
+sudo chmod  771 /home/ftp/hidden
+sudo chmod  775 /home/ftp/public
+sudo chmod 1775 /home/ftp/upload
+
+
+※ Setting TLS certificate
+
+mkdir -p /etc/ssl/private
+openssl req -x509 -nodes -newkey rsa:1024 -keyout /etc/ssl/private/pure-ftpd.pem -out /etc/ssl/private/pure-ftpd.pem
+chmod 600 /etc/ssl/private/*.pem
+
+
+※ Start ftp / Login with :
+
+ftp localhost
+  > anonymous/NULL
+  > sysadm/0516320
+  > ftp-vip1/0516320
+  > ftp-vip2/0516320
+
+
+
+
+
+
+
+
+
+

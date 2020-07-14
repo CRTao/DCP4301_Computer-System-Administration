@@ -1,0 +1,77 @@
+#!/bin/sh
+
+# Put this file in /usr/local/etc/rc.d/ftp_watchd
+#               or /etc/rc.d/ftp_watchd
+# config /etc/rc.conf > ftp_watchd_enable="YES"
+
+. /etc/rc.subr
+
+name=ftp_watchd
+rcvar=ftp_watchd_enable
+
+load_rc_config $name
+
+command=/usr/local/sbin/pure-uploadscript
+procname=pure-uploadscript
+
+ftp_watchd_enable=${ftp_watchd_enable:-"no"}
+ftp_watchd_command=${ftp_watchd_command}
+
+pidfile="/var/run/pure-uploadscript.pid"
+
+start_cmd="${name}_start"
+stop_cmd="${name}_stop"
+restart_cmd="${name}_restart"
+status_cmd="${name}_status"
+poll_cmd="${name}_poll"
+
+ftp_watchd_start(){
+  cmdscript='/usr/local/bin/my-pure-uploadscript.sh'
+  ##
+  ## Verify /usr/local/bin/my-pure-uploadscript.sh for pure-uploadscript
+  ##
+  pid=$(check_pidfile ${pidfile} ${command})
+  if [ -z $pid ];then
+    echo "Starting ${name}."
+    ${command} -B -r ${cmdscript}
+  else
+    echo "${name} already running."
+  fi
+}
+
+ftp_watchd_stop(){
+  pid=$(check_pidfile ${pidfile} ${command})
+  if [ -z "$pid" ];then
+    echo "${name} is not running. (check ${pidfile})"
+    return 1
+  fi
+  echo "Stopping ${name}."
+  kill -${sig_stop:-TERM} ${pid}
+  [ $? -ne 0 ] && [ -z "$rc_force" ] && return 1
+  wait_for_pids ${pid}
+}
+
+ftp_watchd_restart(){
+  ftp_watchd_stop
+  ftp_watchd_start
+}
+
+ftp_watchd_status(){
+  pid=$(check_pidfile ${pidfile} ${command})
+  if [ -n "$pid" ];then
+    echo "${name} is running as PID ${pid}"
+  else 
+    echo "${name} is not running."
+  fi
+}
+
+ftp_watchd_poll(){
+  pid=$(check_pidfile ${pidfile} ${command})
+  if [ -n $pid ];then
+    echo "Waiting for PID: ${pid}"
+    pwait "$pid"
+  fi
+}
+
+run_rc_command "$1"
+

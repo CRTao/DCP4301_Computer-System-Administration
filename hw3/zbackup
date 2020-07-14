@@ -1,0 +1,139 @@
+#!/bin/sh
+
+# Put this file in /usr/local/bin/zbackup
+# sudo chown root: /usr/local/bin/zbackup
+# sudo chmod 755 /usr/local/bin/zbackup
+
+arg1=$1
+arg2=$2
+arg3=$3
+
+# --------------------------------------------------
+
+listZbackup() {
+  list=$(zfs list -t snapshot | grep -v 'NAME' | awk '{print $1}')
+  if [ -n $arg2 ] && [ -z $arg3 ];then
+    if echo $arg2 | egrep -q '^[0-9]+$';then
+        :
+    else
+        list=$(printf %"s\n" $list | grep $arg2@)
+    fi
+  elif [ -n $arg3 ];then
+        list=$(printf %"s\n" $list | grep $arg2@)
+  fi
+
+  line0=$(printf %"s\n" $list | awk '{if(NR==1)print "ID";if(NF!=0)print NR}')
+  line1=$(printf %"s\n" $list | sed -e 's/@[^$,]*//g' | awk '{if(NR==1)print "DataSet ";print $1}')
+  line2=$(printf %"s\n" $list | sed -e 's/[^$,]*@//g' | awk '{if(NR==1)print "Time";print $1}')
+  pr -3 -t -s <<eof > /tmp/zbackup_sets.tmp
+$line0
+$line1
+$line2
+eof
+
+  if echo $arg2 | egrep -q '^[0-9]+$';then
+    cat /tmp/zbackup_sets.tmp | grep "^$arg2\|ID"
+  elif echo $arg3 | egrep -q '^[0-9]+$';then
+    cat /tmp/zbackup_sets.tmp | grep "^$arg3\|ID"
+  else
+    cat /tmp/zbackup_sets.tmp
+  fi
+}
+
+# ---------------------------------------------------
+
+deleteZbackup() {
+  ################################################
+  # zbackup -d 1                 >> IF 1-1       #
+  # zbackup -d mypool/public     >> IF 1-2       #
+  # zbackup -d mypool/upload 2   >> IF 2         #
+  # zbackup -d                   >> NoIF         #
+  ################################################
+
+  SnapList=$(zfs list -t snapshot | awk '{if(NR!=1)print $1}')
+  if [ -n $arg2 ] && [ -z $arg3 ];then
+    if echo $arg2 | egrep -q '^[0-9]+$'; then
+        SnapList=$(echo "$SnapList" | awk NR==$arg2)
+    else
+        SnapList=$(echo "$SnapList" | grep "$arg2")
+    fi
+  elif [ -n $arg2 ] && [ -n $arg3 ];then
+    SnapList=$(echo "$SnapList" | grep "$arg2")
+    SnapList=$(echo "$SnapList" | awk NR==$arg3)
+  fi
+  
+  for item in $SnapList
+  do
+      zfs destroy -r $item
+      echo "Destroy" "$item"
+  done
+}
+
+
+# ------------------------------------------------
+
+exportZbackup() {
+  
+  sendID=1
+  if [ -z $arg3 ]
+  then
+    sendID=1
+  else
+    sendID=$arg3
+  fi
+  
+  data=$(zfs list -t snapshot | grep $arg2@ | awk -v f="$sendID" '{if(NR==f) print $1 }')
+  backUpName=`echo $data | sed -e 's/@[^$,]*//g'`
+  backUpTime=`date +"%Y-%m-%d-%H:%M:%S"`
+  mkdir -p "/tmp/${backUpName}"
+  echo "Export $backUpName@$backUpTime to /tmp/$backUpName@$backUpTime.gz.enc"
+  zfs send $data | gzip | openssl enc -aes-256-cbc -a -salt > /tmp/$backUpName@$backUpTime.gz.enc
+}
+
+#--------------------------------
+
+importZbackup() {
+  openssl enc -d -aes-256-cbc -a -in $arg2 | gunzip | zfs receive -F $arg3
+}
+
+
+# -------------------------------
+
+rotationcount=20
+
+createZbackup() {
+  if [ -z $arg2 ]
+  then
+    rotationCount=20
+  else
+    rotationCount=$arg2
+  fi
+  
+  currentSnapNum=`zfs list -t snapshot | grep $arg1@ | awk 'END{print NR}'`
+  while [ $currentSnapNum -ge $rotationCount ]
+  do
+    target=`zfs list -t snapshot | grep $arg1@ | awk '{if(NR==1)print $1}'`
+    zfs destroy -r $target
+    #echo "Reached rotation upper bound:" $rotationCount
+    echo "Destroy" $target
+    currentSnapNum=$((currentSnapNum-1))
+  done
+  
+  time=`date +"%Y-%m-%d-%H:%M:%S"`
+  zfs snapshot $arg1@$time
+  echo "Snap" $arg1@$time
+}
+
+
+# -----------------------
+
+case $arg1 in
+	"") echo "argument 1 is empty";;
+	"-l") listZbackup;;
+	"-d") deleteZbackup;;
+	"-i") importZbackup;;
+	"-e") exportZbackup;;
+	*) createZbackup;;
+esac
+
+
